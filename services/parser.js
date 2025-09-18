@@ -2,12 +2,15 @@
 
 /**
  * Parses structured email content into application fields.
- * Handles multi-line values, inconsistent spacing, and flexible field markers.
+ * Handles multi-line values, inconsistent spacing, flexible field markers (e.g. *, spaces).
  */
 
 export function parseEmailContent(content) {
-  // Normalize line breaks and spacing
-  content = content.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n\n');
+  // Normalize line breaks
+  content = content.replace(/\r\n/g, '\n');
+
+  // Optionally collapse multiple blank lines (not strictly needed)
+  // content = content.replace(/\n{2,}/g, '\n\n');
 
   // List of known fields in expected order
   const knownFields = [
@@ -33,9 +36,11 @@ export function parseEmailContent(content) {
    */
   function getField(field, content) {
     const escapedField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Build a pattern for the next field(s): allow preceding newline OR *, or spaces
     const nextFields = knownFields
       .filter(f => f !== field)
-      .map(f => `\\n${f}:`)
+      .map(f => `(?:\\n|\\*\\s*|\\s+)${f}:`)
       .join('|');
 
     const regex = new RegExp(
@@ -44,7 +49,20 @@ export function parseEmailContent(content) {
     );
 
     const match = content.match(regex);
-    return match ? match[1].replace(/\r?\n/g, ' ').trim() : '';
+    if (!match) {
+      return '';
+    }
+
+    // Clean the captured part:
+    // - Remove any leading/trailing asterisks
+    // - Remove asterisks inside
+    // - Replace newline with space
+    // - Normalize multiple spaces
+    let value = match[1];
+    value = value.replace(/\*/g, '');            // remove all '*'
+    value = value.replace(/\r?\n/g, ' ');         // newlines → spaces
+    value = value.replace(/\s{2,}/g, ' ');        // collapse double spaces
+    return value.trim();
   }
 
   // Extract all fields
@@ -60,10 +78,14 @@ export function parseEmailContent(content) {
     differentiation: getField('Differentiation', content),
     innovation: getField('Innovation', content),
     conceptNoteLink: getField('Concept Note Link', content),
-    termsAccepted: getField('Terms Accepted', content).toLowerCase() === 'true'
+    // Convert 'true'/'false' (case-insensitive) to boolean
+    termsAccepted: (() => {
+      const t = getField('Terms Accepted', content).toLowerCase();
+      return t === 'true';
+    })()
   };
 
-  // Validate required fields
+  // Validate required fields (you can extend this)
   if (!parsed.fullName || !parsed.email) {
     throw new Error('Failed to parse required fields from email');
   }

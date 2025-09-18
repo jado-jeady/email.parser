@@ -4,9 +4,14 @@ import Application from "./models/Application.js";
 import { authorize } from "./auth.js";   // use new file
 import { parseEmailContent } from "./services/parser.js";
 import { google } from "googleapis";
+import cors from "cors";
+
 
 
 const app = express();
+app.use(cors({
+  origin: '*', // Allow all origins for simplicity; adjust as needed for security
+}));
 app.use(express.json());
 
 async function extractEmailBody(fullMsg) {
@@ -67,7 +72,7 @@ async function processEmailMessage(gmail, msg) {
       throw new Error('Failed to parse required fields from email');
     }
     
-    console.log({ parsedData : parsed });
+   console.log(JSON.stringify(parsed, null, 2));
 
     // Save with Gmail ID using transaction for data consistency
     const transaction = await sequelize.transaction();
@@ -144,10 +149,16 @@ async function fetchEmails(auth) {
           break;
         case 'error':
           results.errors++;
-          results.errorDetails.push({
+            results.errorDetails.push({
             messageId: result.messageId,
-            error: result.error
-          });
+            error: result.error,
+            // Try to extract the column name from the error message if possible
+            column: (() => {
+              // Common Postgres error format: 'value too long for type character varying(255) for column "fullName"'
+              const match = result.error.match(/column "?([a-zA-Z0-9_]+)"?/i);
+              return match ? match[1] : null;
+            })()
+            });
           break;
       }
 
@@ -174,7 +185,7 @@ app.get("/sync", async (req, res) => {
     const auth = await authorize();
     const results = await fetchEmails(auth);
     
-    res.json({ 
+    res.json({
       message: "Email sync completed",
       summary: {
       processed: results.processed,

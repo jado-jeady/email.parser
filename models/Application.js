@@ -9,22 +9,23 @@ Application.init(
             type: DataTypes.STRING, 
             unique: true  // prevents duplicates
         },
-        fullName: DataTypes.STRING,
-        email: DataTypes.STRING,
-        phone: DataTypes.STRING,
-        company: {type: DataTypes.STRING , allowNull: true},
-        projectName: DataTypes.STRING,
-        sector: DataTypes.STRING,
+        fullName: DataTypes.TEXT,
+        email: DataTypes.TEXT,
+        phone: DataTypes.TEXT,
+        company: {type: DataTypes.TEXT , allowNull: true},
+        projectName: DataTypes.TEXT,
+        sector: DataTypes.TEXT,
         projectExplanation: DataTypes.TEXT('long'),
         socialImpact: DataTypes.TEXT('long'),
         differentiation: DataTypes.TEXT('long'),
         innovation: DataTypes.TEXT('long'),
-        conceptNoteLink: DataTypes.STRING,
+        conceptNoteLink: DataTypes.TEXT('long'),
         termsAccepted: DataTypes.BOOLEAN
     },
     {
         sequelize,
-        modelName: "application"
+        modelName: "application",
+        tableName: "applications"
     }
 );
 
