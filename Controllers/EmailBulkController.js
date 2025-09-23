@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import {BulkEmail} from '../models/BulkEmail.js';
+
 
 // Configure Nodemailer with Brevo SMTP
 const transporter = nodemailer.createTransport({
@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-exports.sendBulkEmails = async (req, res) => {
+export const sendBulkEmails = async (req, res) => {
     const { subject, text, html, recipients } = req.body;
 
     if (!Array.isArray(recipients) || recipients.length === 0) {
