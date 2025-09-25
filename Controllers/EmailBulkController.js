@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import BulkEmail from '../models/BulkemailModel.js';
 
 
 // Configure Nodemailer with Brevo SMTP
@@ -13,42 +14,63 @@ const transporter = nodemailer.createTransport({
 });
 
 export const sendBulkEmails = async (req, res) => {
-    const { subject, text, html, recipients } = req.body;
+  try {
+    const {
+      from_email,
+      subject,
+      range,
+      body,
+      signature,
+      recipients: rawRecipients,
+    } = req.body;
+
+    if (!rawRecipients) {
+      return res.status(400).json({ error: 'Recipients field is missing.' });
+    }
+
+    let recipients;
+    try {
+      recipients = JSON.parse(rawRecipients);
+    } catch (err) {
+      return res.status(400).json({ error: 'Recipients must be a valid JSON array.' });
+    }
 
     if (!Array.isArray(recipients) || recipients.length === 0) {
-        return res.status(400).json({ error: 'Recipients list is required.' });
+      return res.status(400).json({ error: 'Recipients list is empty or invalid.' });
     }
 
-    try {
-        // Send emails
-        const sendResults = await Promise.all(
-            recipients.map(async (email) => {
-                try {
-                    await transporter.sendMail({
-                        from: process.env.BREVO_SMTP_USER,
-                        to: email,
-                        subject,
-                        text,
-                        html,
-                    });
-                    return { email, status: 'sent' };
-                } catch (err) {
-                    return { email, status: 'failed', error: err.message };
-                }
-            })
-        );
-
-        // Store in DB
-        await BulkEmail.create({
+    // Send emails
+    const sendResults = await Promise.all(
+      recipients.map(async (email) => {
+        try {
+          await transporter.sendMail({
+            from: from_email,
+            to: email,
             subject,
-            text,
-            html,
-            recipients: JSON.stringify(recipients),
-            results: JSON.stringify(sendResults),
-        });
+            html: signature ? `${body}<br><br>${signature}` : body,
+          });
+          return { email, status: 'sent' };
+        } catch (err) {
+          return { email, status: 'failed', error: err.message };
+        }
+      })
+    );
 
-        res.json({ message: 'Bulk emails processed.', results: sendResults });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    // Store in DB
+    await BulkEmail.create({
+      email_id: `bulk-${Date.now()}`,
+      subject,
+      from_email,
+      body,
+      signature,
+      range,
+      recipients: JSON.stringify(recipients),
+      results: JSON.stringify(sendResults),
+    });
+
+    res.json({ message: 'Bulk emails processed and stored', results: sendResults });
+  } catch (error) {
+    console.error('Bulk email error:', error);
+    res.status(500).json({ error: error.message });
+  }
 };
