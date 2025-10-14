@@ -14,18 +14,16 @@ export function parseEmailContent(content) {
 
   // List of known fields in expected order
   const knownFields = [
-    'Full Name',
+    'Participant Name',
     'Email',
-    'Phone',
-    'Company',
+    'Phone Number',
     'Project Name',
-    'Sector',
-    'Project Explanation',
-    'Social/Environmental Impact',
-    'Differentiation',
-    'Innovation',
-    'Concept Note Link',
-    'Terms Accepted'
+    'Video Link',
+    'Passport Photo',
+    'Participation Type',
+    'Team Members',
+    'District',
+    'Sector'
   ];
 
   /**
@@ -67,22 +65,17 @@ export function parseEmailContent(content) {
 
   // Extract all fields
   const parsed = {
-    fullName: getField('Full Name', content),
+    fullName: getField('Participant Name', content),
     email: getField('Email', content),
-    phone: getField('Phone', content),
-    company: getField('Company', content),
+    phoneNumber: getField('Phone Number', content),
     projectName: getField('Project Name', content),
-    sector: getField('Sector', content),
-    projectExplanation: getField('Project Explanation', content),
-    socialImpact: getField('Social/Environmental Impact', content),
-    differentiation: getField('Differentiation', content),
-    innovation: getField('Innovation', content),
-    conceptNoteLink: getField('Concept Note Link', content),
+    videoLink: getField('Video Link', content),
+    passportPhoto: getField('Passport Photo', content),
+    participationType: getField('Participation Type', content),
+    teamMembers: getField('Team Members', content),
+    district: getField('District', content),
+    sector: getField('Sector', content)
     // Convert 'true'/'false' (case-insensitive) to boolean
-    termsAccepted: (() => {
-      const t = getField('Terms Accepted', content).toLowerCase();
-      return t === 'true';
-    })()
   };
 
   // Validate required fields (you can extend this)

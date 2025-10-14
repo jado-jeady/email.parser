@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import sequelize from "../config/database.js";
-import Application from "../models/Application.js";
+import Top100 from "../models/Top100.js";
 import { parseEmailContent } from "../services/parser.js";
 
 async function extractEmailBody(fullMsg) {
@@ -23,12 +23,12 @@ async function extractEmailBody(fullMsg) {
 }
 
 async function processEmailMessage(gmail, msg) {
-  const exists = await Application.findOne({ where: { gmailId: msg.id } });
+  const exists = await Top100.findOne({ where: { gmailId: msg.id } });
   if (exists) return { status: "skipped", reason: "duplicate" };
 
   const fullMsg = await gmail.users.messages.get({
     userId: "me",
-    id: msg.id,
+    id:msg.id,
     format: "full",
   });
 
@@ -37,10 +37,10 @@ async function processEmailMessage(gmail, msg) {
 
   const parsed = parseEmailContent(body);
   if (!parsed?.fullName) throw new Error("Missing required fields");
-
+  console.log(parsed);
   const transaction = await sequelize.transaction();
   try {
-    await Application.create({ gmailId: msg.id, ...parsed }, { transaction });
+    await Top100.create({ gmailId: msg.id, ...parsed }, { transaction });
     await transaction.commit();
     return { status: "successfully", fullData: parsed };
   } catch (err) {
@@ -57,7 +57,7 @@ export async function fetchEmails(auth) {
   do {
     const res = await gmail.users.messages.list({
       userId: "me",
-      q: "subject:'🚀 New Application Submission'",
+      q: "subject:'Top100 video Submission'",
       maxResults: 100,
       pageToken: nextPageToken,
     });

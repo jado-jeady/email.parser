@@ -4,7 +4,7 @@ import { fetchEmails } from "../Controllers/mailReaderController.js";
 
 const router = express.Router();
 
-router.get("/readmails", async (req, res) => {
+router.get("/mails", async (req, res) => {
   try {
     const auth = await authorize();
     const results = await fetchEmails(auth);
