@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
-
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 import BulkEmail from '../models/BulkemailModel.js';
@@ -18,84 +19,45 @@ const info = await paypack.me();
 console.log(info.data);
 
 
-
-
-// Configure Nodemailer with Brevo SMTP
-const transporter = nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 587,
-    secure: false,
-    auth: {
-        user: process.env.BREVO_SMTP_USER,
-        pass: process.env.BREVO_SMTP_PASS,
-    },
+// Initialize SES client
+const ses = new SESClient({
+  region: 'us-east-1', // or your SES region
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
 });
 
-export const sendBulkEmails = async (req, res) => {
+// Create Nodemailer transport using SES
+const transporter = nodemailer.createTransport({
+  SES: { ses, aws: { SendEmailCommand } },
+});
+
+
+export async function sendBrandedEmail({ to, subject, html, text }) {
+  const mailOptions = {
+    from: '"Mastery Hub" <product@masteryhub.co.rw>',
+    to,
+    subject,
+    html,
+    text,
+  };
+
   try {
-    const {
-      from_email,
-      subject,
-      range,
-      body,
-      signature,
-      recipients: rawRecipients,
-    } = req.body;
+    const result = await transporter.sendMail(mailOptions);
+    
+    console.log('Email sent:', result.messageId);
+    return result;
 
-
-
-    if (!rawRecipients) {
-      return res.status(400).json({ error: 'Recipients field is missing.' });
-    }
-
-    let recipients;
-    try {
-      recipients = JSON.parse(rawRecipients);
-    } catch (err) {
-      return res.status(400).json({ error: 'Recipients must be a valid JSON array.' });
-    }
-
-    if (!Array.isArray(recipients) || recipients.length === 0) {
-      return res.status(400).json({ error: 'Recipients list is empty or invalid.' });
-    }
-
-    // Send emails
-    const sendResults = await Promise.all(
-      recipients.map(async (email) => {
-        try {
-          await transporter.sendMail({
-            from: from_email,
-            to: email,
-            subject,
-            html: signature ? `${body}<br><br>${signature}` : body,
-          });
-          return { email, status: 'sent' };
-        } catch (err) {
-          return { email, status: 'failed', error: err.message };
-        }
-      })
-    );
-
+    
     // Store in DB
-    await BulkEmail.create({
-      email_id: `bulk-${Date.now()}`,
-      subject,
-      from_email,
-      body,
-      signature,
-      range,
-      recipients: JSON.stringify(recipients),
-      results: JSON.stringify(sendResults),
-    });
 
-    res.json({ message: 'Bulk emails processed and stored', results: sendResults });
+
   } catch (error) {
-    console.error('Bulk email error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Email error:', error);
+    throw error;
   }
-};
-
-
+}
 
 
 export const paypackPayment = async (req, res) => {

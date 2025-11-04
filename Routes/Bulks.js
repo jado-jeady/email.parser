@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { paypackPayment, sendBulkEmails } from '../Controllers/BulkMailController.js';
-import { sendBulkSms } from '../Controllers/BulkSMSCOntroller.js';
+import { sendBulkSms } from '../Controllers/BulkSMSController.js';
 
 const router = express.Router();
 
