@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { authorize } from "./auth.js";
 import sequelize from "./config/database.js";
-import emailRoutes from "./Routes/mailReaderRoutes.js";
+//import emailRoutes from "./Routes/mailReaderRoutes.js";
 import Bulks from "./Routes/Bulks.js";
 
 const app = express();
@@ -13,10 +13,10 @@ app.use(express.urlencoded({ extended: true }));
 
 
 
-app.get("/", (req, res) => {
+app.get("/api", (req, res) => {
   res.send("Email Parser API is running");
 });
-app.use("/api/read", emailRoutes);
+//app.use("/api/read", emailRoutes);   removed mail reader routes 
 app.use("/api", Bulks);
 
 sequelize.sync({ alter: true }).then(() => {

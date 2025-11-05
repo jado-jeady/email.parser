@@ -1,7 +1,5 @@
-// models/Participant.model.js
 import { DataTypes,Model } from 'sequelize';
-import sequelize from '../config/database.js'; // adjust path to your sequelize instance
-
+import sequelize from '../config/database.js';
 class Top100 extends Model {}
 
 Top100.init(
