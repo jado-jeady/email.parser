@@ -3,6 +3,7 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import Domain from '../models/email.domains.js';
 import dotenv from 'dotenv';
 import Paypack from 'paypack-js';
+import Email from '../models/Email.js';
 
 import BulkEmail from '../models/BulkemailModel.js';
 
@@ -11,7 +12,7 @@ dotenv.config();
 
 // ✅ Initialize SES client
 const ses = new SESClient({
-  region: process.env.AWS_REGION || "us-east-1",
+  region: process.env.AWS_REGION || "eu-north-1",
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -110,55 +111,76 @@ export const handleSesEvent = async (req, res) => {
   try {
     const messageType = req.headers["x-amz-sns-message-type"];
     const message = req.body;
+    let events=[];
 
-    // Handle SNS subscription confirmation
+    // 🔹 Handle subscription confirmation
     if (messageType === "SubscriptionConfirmation" && message.SubscribeURL) {
       console.log("Confirming SNS subscription...");
       await fetch(message.SubscribeURL);
-      return res.send("Subscription confirmed");
+      console.log("SNS subscription confirmed");
+      return; // ✅ stop here
     }
 
+    // 🔹 Handle notifications
     if (messageType === "Notification") {
       const notification = JSON.parse(message.Message);
       const eventType = notification.eventType;
+      const messageId = notification.mail.messageId;
+      
 
       console.log("SES Event:", eventType);
 
+      // Track each event type
       if (eventType === "Delivery") {
         await Email.update(
-          { delivered: true },
-          { where: { messageId: notification.mail.messageId } }
+        { status: eventType.toLowerCase(), updatedAt: new Date() },
+         { where: { messageId } }
         );
+        
+
       }
+      
 
       if (eventType === "Open") {
-        await Email.update(
-          { opened: true },
-          { where: { messageId: notification.mail.messageId } }
+         await Email.update(
+        { status: eventType.toLowerCase(), updatedAt: new Date() },
+         { where: { messageId } }
         );
       }
 
       if (eventType === "Click") {
-        await Email.update(
-          { clicked: true },
-          { where: { messageId: notification.mail.messageId } }
+         await Email.update(
+        { status: eventType.toLowerCase(), updatedAt: new Date() },
+         { where: { messageId } }
         );
       }
 
-      if (eventType === "Bounce" || eventType === "Complaint") {
+      if (eventType === "Bounce") {
         await Email.update(
-          { bounced: true },
-          { where: { messageId: notification.mail.messageId } }
+        { status: eventType.toLowerCase(), updatedAt: new Date() },
+         { where: { messageId } }
+        );
+      }
+
+      if (eventType === "Complaint") {
+         await Email.update(
+        { status: eventType.toLowerCase(), updatedAt: new Date() },
+         { where: { messageId } }
         );
       }
     }
 
-    res.status(200).end();
+    // ✅ Always send *one* success response
+    return res.status(200).json({ success: true, events: events });
+
   } catch (error) {
     console.error("SES Webhook Error:", error);
-    res.status(500).end();
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal Server Error" });
+    }
   }
 };
+
 
 
 
@@ -169,42 +191,28 @@ export const handleSesEvent = async (req, res) => {
  */
 export const sendBrandedEmail = async (req, res) => {
   try {
-    const { to, subject, html, text } = req.body;
+    const { recipients, subject, body } = req.body;
 
-    if (!to || !subject || !html) {
+    if (!recipients || !subject || !body) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: to, subject, and html",
+        message: "Missing required fields: recipients, subject, and body",
       });
     }
 
-    const params = {
-      Source: "noreply@masteryhub.co.rw", // ✅ verified sender in SES
-      Destination: {
-        ToAddresses: [to],
-      },
-      Message: {
-        Subject: { Data: subject, Charset: "UTF-8" },
-        Body: {
-          Html: { Data: html, Charset: "UTF-8" },
-          ...(text ? { Text: { Data: text, Charset: "UTF-8" } } : {}),
-        },
-      },
-      // 👇 Include only if you've set up tracking
-      ConfigurationSetName: "my-first-configuration-set",
-    };
-
-    const command = new SendEmailCommand(params);
-    const response = await ses.send(command);
-
-    console.log("✅ Email sent successfully:", response.MessageId);
-
+    const results = await sendBulkEmails(recipients, subject, body);
     res.status(200).json({
       success: true,
       message: "Email sent successfully",
-      messageId: response.MessageId,
-      to,
+      results,
     });
+    return {
+      success: true,
+      message: "Email sent successfully",
+      results: results,
+    };
+
+     
   } catch (error) {
     console.error("❌ SES Email Send Error:", error);
     res.status(500).json({
@@ -212,4 +220,46 @@ export const sendBrandedEmail = async (req, res) => {
       error: error.message,
     });
   }
+};
+
+
+export const sendBulkEmails = async (recipients, subject, body) => {
+  const results = [];
+
+  for (const email of recipients) {
+    const params = {
+      Source: "no-reply@bulkme.masteryhub.co.rw",
+      Destination: { ToAddresses: [email] },
+      Message: {
+        Subject: { Data: subject },
+        Body: { Html: { Data: body } },
+      },
+    };
+
+    try {
+      const command = new SendEmailCommand(params);
+      const response = await ses.send(command);
+
+      // Store each email in DB with messageId for tracking
+      await Email.create({
+        email,
+        subject,
+        status: "sent",
+        messageId: response.MessageId,
+      });
+
+      results.push({ email, status: "sent" });
+    } catch (error) {
+      await Email.create({
+        email,
+        subject,
+        status: "failed",
+        error: error.message,
+      });
+
+      results.push({ email, status: "failed", error: error.message });
+    }
+  }
+
+  return results;
 };

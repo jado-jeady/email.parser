@@ -9,7 +9,7 @@ const upload = multer(); // For parsing multipart/form-data without files
 
 // Use the upload middleware to handle form-data
 
-router.post('/Mail/send', upload.none(), sendBrandedEmail);
+router.post('/mail/send', upload.none(), sendBrandedEmail); 
 router.post('/Sesevent', express.json({ type: "*/*" }), handleSesEvent);
 router.post('/SMS/send', sendBulkSms);
 router.post('/Payment/Pay', paypackPayment);
