@@ -1,11 +1,13 @@
-import nodemailer from 'nodemailer';
+import crypto from "crypto";
+import { Op } from "sequelize";
+import AnonymousUser from "../models/Mail.anonymus.User.js";
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import Domain from '../models/email.domains.js';
+import Domain from '../models/Email.domains.js';
 import dotenv from 'dotenv';
 import Paypack from 'paypack-js';
 import Email from '../models/Email.js';
-
-import BulkEmail from '../models/BulkemailModel.js';
+import sequelize from "../config/database.js";
+import { Console, error } from "console";
 
 
 dotenv.config();
@@ -28,7 +30,7 @@ const paypack = PaypackJs.config({
   client_secret: 'a06ea88e87b8a21af669b232d67da163da39a3ee5e6b4b0d3255bfef95601890afd80709',
 });
 
-const info = await paypack.me();
+//const info = await //paypack.me();
 // log Paypack user info to the console
 //console.log(info.data);
 
@@ -105,7 +107,7 @@ export const getUserDomain = async (userId) => {
   return domain;
 };
 
-// SES SNS COntroller to handle bounces and complaints
+// SES SNS COntroller to handle bounces and complaints with Callback
 
 export const handleSesEvent = async (req, res) => {
   try {
@@ -191,14 +193,59 @@ export const handleSesEvent = async (req, res) => {
  */
 export const sendBrandedEmail = async (req, res) => {
   try {
-    const { recipients, subject, body } = req.body;
+    const { fingerprint, recipients, subject, body } = req.body;
 
     if (!recipients || !subject || !body) {
+      if(!fingerprint){
+        return res.status(400).json({
+          success: false,
+          errorType: "Fingerprint is required",
+          message: "Internal Error",
+        });
+      }
       return res.status(400).json({
         success: false,
+        errorType: "MissingFields",
         message: "Missing required fields: recipients, subject, and body",
       });
     }
+
+    // ✅ Generate hybrid hash for better tracking
+    const ipAddress = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+    const userAgent = req.headers["user-agent"];
+    const hash = crypto
+      .createHash("sha256")
+      .update(ipAddress + userAgent)
+      .digest("hex");
+
+      // ✅ Find existing record
+    let user = await AnonymousUser.findOne({
+      where: {
+        [Op.or]: [{ fingerprint }, { hash }],
+      },
+    });
+
+    if (!user) {
+      // Create new anonymous record
+      user = await AnonymousUser.create({
+        fingerprint,
+        ip_address: ipAddress,
+        hash,
+      });
+    }
+     // ✅ Check email send limit (3 free)
+    if (user.emails_sent_count >= 3) {
+       console.log("Free Email Limit Reached for User:", hash);
+      return res
+        .status(200)
+        .json({ errorType: "FreeLimitExceeded", fingerprint: hash, message: "Your Free Email Limit Has Been Reached. Please Login or Create an Account to Continue." });
+       
+    }
+
+    // ✅ Increment email sent count
+    user.emails_sent_count += 1;
+    await user.save();
+    
 
     const results = await sendBulkEmails(recipients, subject, body);
     res.status(200).json({
@@ -223,12 +270,14 @@ export const sendBrandedEmail = async (req, res) => {
 };
 
 
+//function to send an email to any array of recipients
+
 export const sendBulkEmails = async (recipients, subject, body) => {
   const results = [];
 
   for (const email of recipients) {
     const params = {
-      Source: "no-reply@bulkme.masteryhub.co.rw",
+      Source: "no-reply@masteryhub.co.rw",
       Destination: { ToAddresses: [email] },
       Message: {
         Subject: { Data: subject },
@@ -249,6 +298,7 @@ export const sendBulkEmails = async (recipients, subject, body) => {
       });
 
       results.push({ email, status: "sent" });
+
     } catch (error) {
       await Email.create({
         email,
@@ -263,3 +313,5 @@ export const sendBulkEmails = async (recipients, subject, body) => {
 
   return results;
 };
+
+// 
